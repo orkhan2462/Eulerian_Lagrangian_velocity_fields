@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eulerian vs Lagrangian Flow Fields</title>
+    
+    <script>
+        window.MathJax = {
+            chtml: { displayAlign: 'center', displayIndent: '0' },
+            startup: {
+                pageReady: () => {
+                    return MathJax.startup.defaultPageReady().then(() => {
+                        window.mathJaxLoaded = true;
+                        if (typeof initSimulation === 'function') initSimulation();
+                    });
+                }
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            background-color: #f4f4f9;
+            color: #333;
+            overflow: hidden;
+        }
+
+        #error-log {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: white; color: #c0392b;
+            padding: 20px; z-index: 9999;
+            font-family: monospace; font-size: 1.2rem;
+        }
+
+        /* Layout Configuration */
+        #canvas-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #eef2f5;
+            border-right: 2px solid #ddd;
+            position: relative;
+        }
+
+        canvas {
+            background-color: #f8f9fa;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+            cursor: grab;
+        }
+
+        canvas:active {
+            cursor: grabbing;
+        }
+
+        /* Scrollable Control Panel */
+        #control-panel {
+            width: 380px;
+            padding: 20px;
+            background-color: #ffffff;
+            overflow-y: auto; 
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 1.4rem;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 5px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 12px 15px;
+            background: #fdfdfd;
+            border: 1px solid #eee;
+            border-radius: 6px;
+        }
+
+        /* Tight Equation Panel */
+        .eq-panel {
+            background-color: #ebf5fb;
+            border-left: 4px solid #3498db;
+            padding: 12px 15px;
+        }
+
+        .eq-title {
+            font-weight: 700;
+            font-size: 0.8rem;
+            color: #2980b9;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: -5px;
+        }
+
+        .eq-math {
+            font-size: 0.9rem;
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        /* Strip default margins to prevent double spacing */
+        .eq-math mjx-container[display="true"] {
+            margin: 0.5em 0 !important;
+        }
+
+        label {
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        select, input[type="number"], input[type="range"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+            width: 100%;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+            margin-top: 5px;
+        }
+
+        button:hover { background-color: #2980b9; }
+        button.danger { background-color: #e74c3c; }
+        button.danger:hover { background-color: #c0392b; }
+
+        .info-text {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 5px;
+            line-height: 1.4;
+        }
+
+        #time-display {
+            font-family: monospace;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #d35400;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="error-log"></div>
+
+    <div id="canvas-container">
+        <canvas id="simCanvas" width="800" height="800"></canvas>
+    </div>
+
+    <div id="control-panel">
+        <h2>Flow Control Panel</h2>
+        
+        <div class="control-group">
+            <label for="fieldSelect">Velocity Field:</label>
+            <select id="fieldSelect">
+                <option value="field1"> (1D Unsteady)</option>
+                <option value="field2"> (2D Stagnation)</option>
+            </select>
+        </div>
+
+        <div class="control-group eq-panel">
+            <div class="eq-title">Eulerian Field</div>
+            <div id="eq-eulerian" class="eq-math">Loading math...</div>
+            
+            <div class="eq-title" style="margin-top: 10px;">Lagrangian Particle Velocity</div>
+            <div id="eq-lagrangian" class="eq-math">Loading math...</div>
+        </div>
+
+        <div class="control-group">
+            <label for="simSpeed">Simulation Speed: <span id="speedVal">1.0x</span></label>
+            <input type="range" id="simSpeed" min="0.1" max="3.0" step="0.1" value="1.0">
+        </div>
+
+        <div class="control-group">
+            <label for="particleCount">Particles to Release (1 to 5):</label>
+            <input type="number" id="particleCount" min="1" max="5" value="3">
+            <button id="releaseBtn">Release Particles</button>
+            <div class="info-text">
+                <b>Interaction:</b> Drag any particle to a new location. It will stay exactly where you drop it. Values strictly appear during exact grid overlaps.
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label>Simulation Time: <span id="time-display">0.00</span>s</label>
+            <button id="toggleTimeBtn">Pause Flow</button>
+            <button id="resetTimeBtn">Reset Time</button>
+            <button id="clearBtn" class="danger">Clear All Particles</button>
+        </div>
+    </div>
+
+    <script>
+    try {
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        let t = 0;
+        let baseDt = 0.01; 
+        let speedMult = 1.0;
+        let isPlaying = true;
+        let particles = [];
+        let animationId;
+
+        let isDragging = false;
+        let draggedParticle = null;
+
+        const scale = 40; 
+        const offsetX = width / 2;
+        const offsetY = height / 2;
+        const gridSpacing = 2; 
+
+        function toScreen(x, y) {
+            return { sx: x * scale + offsetX, sy: -y * scale + offsetY };
+        }
+
+        // Applied Textbook Examples 3.1 and 3.2
+        const k = 0.5; // Constant for Ex 3.2 visualization scaling
+        
+        const fields = {
+            field1: {
+                // Example 1
+                u: (x, y, time) => x + time,
+                v: (x, y, time) => 0,
+                texE: `$$\\begin{aligned} u(x,t) &= x + t \\\\ v(x,t) &= 0 \\end{aligned}$$`,
+                texL: `$$\\begin{aligned} V_x(t) &= (x_0 + t_0 + 1)e^{t-t_0} - 1 \\\\ V_y(t) &= 0 \\end{aligned}$$`
+            },
+            field2: {
+                // Example 2
+                u: (x, y, time) => -k * x + k * y * (Math.exp(-k * time) + Math.exp(-3 * k * time)),
+                v: (x, y, time) => k * y,
+                texE: `$$\\begin{aligned} u &= -kx + ky(e^{-kt} + e^{-3kt}) \\\\ v &= ky \\end{aligned}$$`,
+                texL: `$$\\begin{aligned} V_x &= -kx_0 e^{-kt} + 2ky_0 e^{-2kt} \\\\ V_y &= ky_0 e^{kt} \\end{aligned}$$`
+            }
+        };
+
+        let currentField = 'field1';
+
+        // Drag and Drop implementation without snapping
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+
+            for (let p of particles) {
+                let pos = toScreen(p.x, p.y);
+                if (Math.hypot(mx - pos.sx, my - pos.sy) < 15) {
+                    isDragging = true;
+                    draggedParticle = p;
+                    break;
+                }
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging && draggedParticle) {
+                const rect = canvas.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                
+                draggedParticle.x = (mx - offsetX) / scale;
+                draggedParticle.y = -(my - offsetY) / scale; 
+            }
+        });
+
+        const endDrag = () => {
+            isDragging = false;
+            draggedParticle = null;
+        };
+
+        canvas.addEventListener('mouseup', endDrag);
+        canvas.addEventListener('mouseleave', endDrag);
+
+        function drawGridAndStations() {
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 2;
+            let origin = toScreen(0, 0);
+            ctx.beginPath(); ctx.moveTo(0, origin.sy); ctx.lineTo(width, origin.sy); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(origin.sx, 0); ctx.lineTo(origin.sx, height); ctx.stroke();
+
+            const field = fields[currentField];
+            ctx.fillStyle = '#95a5a6';
+            ctx.strokeStyle = '#bdc3c7';
+            ctx.lineWidth = 1;
+
+            for (let x = -10; x <= 10; x += gridSpacing) {
+                for (let y = -10; y <= 10; y += gridSpacing) {
+                    let start = toScreen(x, y);
+                    ctx.beginPath();
+                    ctx.arc(start.sx, start.sy, 2, 0, Math.PI*2);
+                    ctx.fill();
+
+                    let u = field.u(x, y, t);
+                    let v = field.v(x, y, t);
+                    let mag = Math.sqrt(u*u + v*v);
+                    
+                    if (mag === 0 || !isFinite(mag)) continue;
+                    
+                    // Cap vector drawing length so it doesn't clutter visually
+                    let drawLength = Math.min(mag * 0.4, gridSpacing * 0.8);
+                    let endX = x + (u/mag) * drawLength;
+                    let endY = y + (v/mag) * drawLength;
+                    let end = toScreen(endX, endY);
+
+                    ctx.beginPath();
+                    ctx.moveTo(start.sx, start.sy);
+                    ctx.lineTo(end.sx, end.sy);
+                    ctx.stroke();
+
+                    let angle = Math.atan2(end.sy - start.sy, end.sx - start.sx);
+                    ctx.beginPath();
+                    ctx.moveTo(end.sx, end.sy);
+                    ctx.lineTo(end.sx - 5 * Math.cos(angle - Math.PI/6), end.sy - 5 * Math.sin(angle - Math.PI/6));
+                    ctx.lineTo(end.sx - 5 * Math.cos(angle + Math.PI/6), end.sy - 5 * Math.sin(angle + Math.PI/6));
+                    ctx.fill();
+                }
+            }
+        }
+
+        function drawParticles() {
+            const field = fields[currentField];
+
+            for (let p of particles) {
+                let pos = toScreen(p.x, p.y);
+                
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(pos.sx, pos.sy, (p === draggedParticle) ? 9 : 7, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                if (p === draggedParticle) continue;
+
+                let nearestX = Math.round(p.x / gridSpacing) * gridSpacing;
+                let nearestY = Math.round(p.y / gridSpacing) * gridSpacing;
+                let distToStation = Math.hypot(p.x - nearestX, p.y - nearestY);
+
+                if (distToStation < 0.25) {
+                    let u = field.u(p.x, p.y, t);
+                    let v = field.v(p.x, p.y, t);
+                    let mag = Math.sqrt(u*u + v*v);
+
+                    ctx.font = 'bold 15px monospace';
+                    let text = mag.toFixed(2);
+                    let textWidth = ctx.measureText(text).width;
+                    
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                    ctx.fillRect(pos.sx - textWidth/2 - 4, pos.sy - 28, textWidth + 8, 20);
+                    
+                    ctx.fillStyle = '#c0392b'; 
+                    ctx.fillText(text, pos.sx - textWidth/2, pos.sy - 13);
+                }
+            }
+        }
+
+        function updateParticles() {
+            const field = fields[currentField];
+            let dt = baseDt * speedMult;
+
+            for (let p of particles) {
+                if (p === draggedParticle) continue; 
+                let u = field.u(p.x, p.y, t);
+                let v = field.v(p.x, p.y, t);
+                p.x += u * dt;
+                p.y += v * dt;
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            drawGridAndStations(); 
+            drawParticles();       
+
+            if (isPlaying) {
+                let dt = baseDt * speedMult;
+                t += dt;
+                updateParticles();
+                document.getElementById('time-display').innerText = t.toFixed(2);
+            }
+            animationId = requestAnimationFrame(animate);
+        }
+
+        function updateEquations() {
+            const containerE = document.getElementById('eq-eulerian');
+            const containerL = document.getElementById('eq-lagrangian');
+            
+            containerE.innerHTML = fields[currentField].texE;
+            containerL.innerHTML = fields[currentField].texL + (currentField === 'field2' ? `<div style='text-align:center;font-size:0.75rem;margin-top:5px;color:#666;'>*Simulated with k = 0.5</div>` : '');
+            
+            if (window.MathJax && window.mathJaxLoaded) {
+                MathJax.typesetPromise([containerE, containerL]).catch(err => console.error("MathJax error:", err.message));
+            }
+        }
+
+        document.getElementById('fieldSelect').addEventListener('change', (e) => {
+            currentField = e.target.value;
+            particles = []; 
+            updateEquations();
+        });
+
+        document.getElementById('simSpeed').addEventListener('input', (e) => {
+            speedMult = parseFloat(e.target.value);
+            document.getElementById('speedVal').innerText = speedMult.toFixed(1) + 'x';
+        });
+
+        document.getElementById('releaseBtn').addEventListener('click', () => {
+            let count = parseInt(document.getElementById('particleCount').value);
+            count = Math.max(1, Math.min(5, count)); 
+            const colors = ['#3498db', '#9b59b6', '#f1c40f', '#2ecc71', '#e67e22'];
+            
+            for (let i = 0; i < count; i++) {
+                let rx = Math.round(((Math.random() * 8) - 4) / gridSpacing) * gridSpacing; 
+                let ry = Math.round(((Math.random() * 8) - 4) / gridSpacing) * gridSpacing;
+                rx -= (gridSpacing / 1.5);
+                
+                particles.push({
+                    x: rx, y: ry,
+                    color: colors[particles.length % colors.length]
+                });
+            }
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => { particles = []; });
+
+        document.getElementById('toggleTimeBtn').addEventListener('click', (e) => {
+            isPlaying = !isPlaying;
+            e.target.innerText = isPlaying ? "Resume Flow" : "Pause Flow";
+        });
+
+        document.getElementById('resetTimeBtn').addEventListener('click', () => {
+            t = 0;
+            particles = []; 
+            document.getElementById('time-display').innerText = "0.00";
+        });
+
+        // Initialize safely once MathJax allows it, or forcefully if it takes too long
+        window.initSimulation = function() {
+            updateEquations();
+            if (!animationId) animate();
+        };
+
+        // Fallback execution incase MathJax fails to trigger the callback
+        setTimeout(() => {
+            if (!animationId) initSimulation();
+        }, 1000);
+
+    } catch (e) {
+        document.getElementById('error-log').style.display = 'block';
+        document.getElementById('error-log').innerText = "FATAL ERROR: \n" + e.toString() + "\n\nPlease check your browser's console for more details.";
+    }
+    </script>
+</body>
+</html>
