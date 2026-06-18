@@ -192,7 +192,7 @@
             <div class="eq-title">Eulerian Field</div>
             <div id="eq-eulerian" class="eq-math">Loading math...</div>
             
-            <div class="eq-title" style="margin-top: 10px;">Lagrangian Particle Velocity</div>
+            <div class="eq-title" style="margin-top: 10px;">Lagrangian Particle </div>
             <div id="eq-lagrangian" class="eq-math">Loading math...</div>
         </div>
 
@@ -253,14 +253,14 @@
                 u: (x, y, time) => x + time,
                 v: (x, y, time) => 0,
                 texE: `$$\\begin{aligned} u(x,t) &= x + t \\\\ v(x,t) &= 0 \\end{aligned}$$`,
-                texL: `$$\\begin{aligned} V_x(t) &= (x_0 + t_0 + 1)e^{t-t_0} - 1 \\\\ V_y(t) &= 0 \\end{aligned}$$`
+                texL: `$$\\begin{aligned} x(t) &= (x_0 + t_0 + 1)e^{t-t_0} - 1 \\\\ y(t) &= 0 \\end{aligned}$$`
             },
             field2: {
                 // Example 2
                 u: (x, y, time) => -k * x + k * y * (Math.exp(-k * time) + Math.exp(-3 * k * time)),
                 v: (x, y, time) => k * y,
                 texE: `$$\\begin{aligned} u &= -kx + ky(e^{-kt} + e^{-3kt}) \\\\ v &= ky \\end{aligned}$$`,
-                texL: `$$\\begin{aligned} V_x &= -kx_0 e^{-kt} + 2ky_0 e^{-2kt} \\\\ V_y &= ky_0 e^{kt} \\end{aligned}$$`
+                texL: `$$\\begin{aligned} x &= -kx_0 e^{-kt} + 2ky_0 e^{-2kt} \\\\ y &= ky_0 e^{kt} \\end{aligned}$$`
             }
         };
 
